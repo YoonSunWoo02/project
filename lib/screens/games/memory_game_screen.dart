@@ -1,13 +1,12 @@
-// lib/screens/memory_game_screen.dart
+import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/material.dart';
+import '../../services/record_service.dart';
 
-// 1. 카드 아이템의 상태를 관리할 모델
 class CardItem {
-  final IconData icon; // 카드 앞면 아이콘
-  bool isFlipped; // 뒤집혔는지 여부
-  bool isMatched; // 짝을 맞췄는지 여부
+  final IconData icon;
+  bool isFlipped;
+  bool isMatched;
 
   CardItem({
     required this.icon,
@@ -24,12 +23,13 @@ class MemoryGameScreen extends StatefulWidget {
 }
 
 class _MemoryGameScreenState extends State<MemoryGameScreen> {
-  late List<CardItem> cards; // 게임 카드 리스트
-  int? firstFlippedIndex; // 첫 번째로 뒤집은 카드의 인덱스
-  int? secondFlippedIndex; // 두 번째로 뒤집은 카드의 인덱스
-  bool isChecking = false; // 현재 짝이 맞는지 확인 중(클릭 방지)
+  late List<CardItem> cards;
+  int? firstFlippedIndex;
+  int? secondFlippedIndex;
 
-  // (추가) 게임에 사용할 아이콘 목록 (6쌍 = 12개 카드)
+  // 🔥 [수정] 처음에 보여주는 동안 터치 막기 위해 true로 시작
+  bool isChecking = true;
+
   final List<IconData> iconPool = [
     Icons.pets,
     Icons.star,
@@ -39,96 +39,115 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
     Icons.anchor,
   ];
 
+  bool _isGameEnded = false;
+  int _mistakeCount = 0;
+
   @override
   void initState() {
     super.initState();
-    _startNewGame(); // 새 게임 시작
+    _startNewGame();
   }
 
-  // (수정) 새 게임 시작 함수
   void _startNewGame() {
     setState(() {
-      // 아이콘 목록을 두 배로 만들어 짝을 맞춤
       List<IconData> gameIcons = [...iconPool, ...iconPool];
-      gameIcons.shuffle(Random()); // 아이콘 섞기
+      gameIcons.shuffle(Random());
 
-      // 섞인 아이콘으로 카드 리스트 생성
-      cards = gameIcons.map((icon) => CardItem(icon: icon)).toList();
+      // 🔥 [수정] 처음에는 모든 카드를 뒤집은 상태(앞면)로 시작!
+      cards = gameIcons
+          .map((icon) => CardItem(icon: icon, isFlipped: true))
+          .toList();
 
       firstFlippedIndex = null;
       secondFlippedIndex = null;
-      isChecking = false;
+      _isGameEnded = false;
+      _mistakeCount = 0;
+      isChecking = true; // 1초 동안은 터치 금지
+    });
+
+    // 🔥 [추가] 1초 후에 카드를 모두 덮어버리기 (게임 시작)
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          for (var card in cards) {
+            card.isFlipped = false; // 뒷면으로
+          }
+          isChecking = false; // 이제 터치 가능!
+        });
+      }
     });
   }
 
-  // (수정) 카드 탭(Tap) 이벤트 처리
   void _onCardTapped(int index) {
-    // 이미 짝을 맞췄거나, 2개가 뒤집혀 확인 중이거나, 이미 뒤집힌 카드는 무시
     if (cards[index].isMatched || isChecking || cards[index].isFlipped) {
       return;
     }
 
     setState(() {
-      cards[index].isFlipped = true; // 탭한 카드 뒤집기
+      cards[index].isFlipped = true;
 
       if (firstFlippedIndex == null) {
-        // 1. 첫 번째 카드일 경우
         firstFlippedIndex = index;
       } else {
-        // 2. 두 번째 카드일 경우
         secondFlippedIndex = index;
-        isChecking = true; // 확인 시작 (클릭 방지)
-
-        // 짝이 맞는지 확인
+        isChecking = true;
         _checkForMatch();
       }
     });
   }
 
-  // (수정) 짝이 맞는지 확인하는 함수
   void _checkForMatch() {
     final int index1 = firstFlippedIndex!;
     final int index2 = secondFlippedIndex!;
 
-    // 두 카드의 아이콘이 같은지 비교
     if (cards[index1].icon == cards[index2].icon) {
-      // 3. 짝이 맞을 경우
       setState(() {
         cards[index1].isMatched = true;
         cards[index2].isMatched = true;
       });
-      _resetFlippedCards(); // 인덱스 초기화
+      _resetFlippedCards();
 
-      // (추가) 모든 짝을 맞췄는지 확인
       if (cards.every((card) => card.isMatched)) {
         Future.delayed(const Duration(milliseconds: 500), () {
           _showSuccessDialog();
         });
       }
     } else {
-      // 4. 짝이 틀릴 경우
-      // 1초 후에 다시 뒤집음
+      setState(() {
+        _mistakeCount++;
+      });
+
       Timer(const Duration(seconds: 1), () {
         setState(() {
           cards[index1].isFlipped = false;
           cards[index2].isFlipped = false;
         });
-        _resetFlippedCards(); // 인덱스 초기화
+        _resetFlippedCards();
       });
     }
   }
 
-  // (추가) 뒤집은 카드 인덱스 초기화
   void _resetFlippedCards() {
     setState(() {
       firstFlippedIndex = null;
       secondFlippedIndex = null;
-      isChecking = false; // 클릭 방지 해제
+      isChecking = false;
     });
   }
 
-  // 성공 시 다이얼로그
   void _showSuccessDialog() {
+    if (_isGameEnded) return;
+
+    setState(() {
+      _isGameEnded = true;
+    });
+
+    RecordService().saveRecord(
+      gameTitle: '기억력 게임',
+      score: _mistakeCount,
+      result: '성공',
+    );
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -141,26 +160,37 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const Text('모든 카드의 짝을 맞췄어요!', style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 10),
+              Text(
+                '틀린 횟수: $_mistakeCount번',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.redAccent,
+                ),
+              ),
+              const SizedBox(height: 20),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF5A67D8),
                   minimumSize: const Size(double.infinity, 50),
                 ),
                 child: const Text(
-                  '다음 단계로 넘어 가기',
+                  '다시 하기',
                   style: TextStyle(color: Colors.white),
                 ),
                 onPressed: () {
-                  Navigator.pop(context); // 다이얼로그 닫기
-                  _startNewGame(); // 새 게임 시작
+                  Navigator.pop(context);
+                  _startNewGame();
                 },
               ),
               const SizedBox(height: 10),
               TextButton(
                 child: const Text('홈으로 돌아가기'),
                 onPressed: () {
-                  Navigator.pop(context); // 다이얼로그 닫기
-                  Navigator.pop(context); // 게임 화면 닫고 메뉴로
+                  Navigator.pop(context);
+                  Navigator.pop(context);
                 },
               ),
             ],
@@ -177,38 +207,33 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
         title: const Text('기억력 게임'),
         backgroundColor: const Color(0xFF5A67D8),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.lock), label: 'Lock'),
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-      ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            // 1. 지시문
-            const Text(
-              '같은 그림의 카드를 찾아보아요!',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '짝을 찾아보세요!',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '실수: $_mistakeCount',
+                  style: const TextStyle(fontSize: 18, color: Colors.red),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
-
-            // 2. 게임 판 (GridView)
             Expanded(
               child: GridView.builder(
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3, // 3 x 4 그리드
+                  crossAxisCount: 3,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
                 ),
-                itemCount: cards.length, // 12개 카드
+                itemCount: cards.length,
                 itemBuilder: (context, index) {
                   return _buildCard(index);
                 },
@@ -220,11 +245,9 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
     );
   }
 
-  // (수정) 카드 1개를 만드는 위젯
   Widget _buildCard(int index) {
     CardItem card = cards[index];
 
-    // GestureDetector: '탭' 이벤트를 감지
     return GestureDetector(
       onTap: () {
         _onCardTapped(index);
@@ -237,10 +260,8 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
           transitionBuilder: (Widget child, Animation<double> animation) {
             return RotationTransition(turns: animation, child: child);
           },
-          // (수정) 뒤집혔거나 짝이 맞으면 아이콘, 아니면 물음표
           child: (card.isFlipped || card.isMatched)
               ? Center(
-                  // 카드 앞면
                   key: ValueKey('front_$index'),
                   child: Icon(
                     card.icon,
@@ -251,7 +272,6 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
                   ),
                 )
               : Center(
-                  // 카드 뒷면
                   key: ValueKey('back_$index'),
                   child: const Icon(
                     Icons.question_mark,

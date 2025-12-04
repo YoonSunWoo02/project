@@ -1,6 +1,6 @@
-// lib/screens/math_game_screen.dart
-import 'dart:math'; // min 함수와 Random을 위해 import
+import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../services/record_service.dart';
 
 class MathGameScreen extends StatefulWidget {
   const MathGameScreen({super.key});
@@ -13,17 +13,21 @@ class _MathGameScreenState extends State<MathGameScreen> {
   // --- 게임 상태 변수 ---
   late int _correctAnswer;
   late List<int> _options;
-  late String _problemText = ''; // 빈 문자열로 초기화
+  late String _problemText = '';
 
   // --- 레벨 시스템 변수 ---
   int _currentLevel = 1;
   int _correctAnswersInLevel = 0;
-  final int _problemsPerLevel = 3; // 레벨당 문제 수
+  final int _problemsPerLevel = 3;
 
   String feedbackMessage = '';
   Color feedbackColor = Colors.transparent;
 
   final Random _random = Random();
+  bool _isGameEnded = false;
+
+  // 🔥 [추가] 단계별 틀린 횟수 저장용 리스트 (인덱스 0: 1단계, 1: 2단계, 2: 3단계)
+  List<int> _mistakesByLevel = [0, 0, 0];
 
   @override
   void initState() {
@@ -35,6 +39,8 @@ class _MathGameScreenState extends State<MathGameScreen> {
     setState(() {
       _currentLevel = 1;
       _correctAnswersInLevel = 0;
+      _isGameEnded = false;
+      _mistakesByLevel = [0, 0, 0]; // 🔥 실수 횟수 초기화
       _generateNewProblem();
     });
   }
@@ -44,26 +50,22 @@ class _MathGameScreenState extends State<MathGameScreen> {
     String operator;
 
     if (_currentLevel == 1) {
-      // 레벨 1: 덧셈
       num1 = _random.nextInt(9) + 1;
       num2 = _random.nextInt(9) + 1;
       _correctAnswer = num1 + num2;
       operator = '+';
     } else if (_currentLevel == 2) {
-      // 레벨 2: 뺄셈
       num1 = _random.nextInt(11) + 10;
       num2 = _random.nextInt(num1 + 1);
       _correctAnswer = num1 - num2;
       operator = '-';
     } else {
-      // 레벨 3: 곱셈
       num1 = _random.nextInt(8) + 2;
       num2 = _random.nextInt(8) + 2;
       _correctAnswer = num1 * num2;
       operator = 'x';
     }
 
-    // 보기 생성
     _options = [_correctAnswer];
     while (_options.length < 3) {
       int wrongAnswerRange;
@@ -75,7 +77,6 @@ class _MathGameScreenState extends State<MathGameScreen> {
         wrongAnswerRange = 81;
 
       int wrongAnswer = _random.nextInt(wrongAnswerRange) + 1;
-
       if (wrongAnswer != _correctAnswer && !_options.contains(wrongAnswer)) {
         _options.add(wrongAnswer);
       }
@@ -85,29 +86,24 @@ class _MathGameScreenState extends State<MathGameScreen> {
     setState(() {
       _problemText = '$num1 $operator $num2 = ?';
       feedbackMessage = '';
-      // 💡 (수정) 버튼이 다시 눌릴 수 있도록 피드백 색상도 초기화합니다.
       feedbackColor = Colors.transparent;
     });
   }
 
   void _checkAnswer(int selectedAnswer) {
     if (selectedAnswer == _correctAnswer) {
-      // --- 정답일 경우 ---
       setState(() {
         feedbackMessage = '정답입니다! 딩동댕! 🔔';
         feedbackColor = Colors.green;
       });
 
-      // 1초 대기 후 다음 동작
       Future.delayed(const Duration(seconds: 1), () {
         if (!mounted) return;
 
-        _correctAnswersInLevel++; // 새 문제 로드 직전에 증가
+        _correctAnswersInLevel++;
 
         if (_correctAnswersInLevel >= _problemsPerLevel) {
-          // --- 레벨 통과 ---
           if (_currentLevel < 3) {
-            // 다음 레벨로
             setState(() {
               _currentLevel++;
               _correctAnswersInLevel = 0;
@@ -116,25 +112,44 @@ class _MathGameScreenState extends State<MathGameScreen> {
             });
             Future.delayed(const Duration(seconds: 1), _generateNewProblem);
           } else {
-            // --- 3레벨 모두 클리어 ---
             _showGameClearDialog();
           }
         } else {
-          // --- 현재 레벨의 다음 문제 ---
           _generateNewProblem();
         }
       });
     } else {
-      // --- 오답일 경우 ---
+      // ❌ [수정] 틀렸을 때 해당 단계의 실수 카운트 증가!
       setState(() {
+        _mistakesByLevel[_currentLevel - 1]++; // 현재 레벨의 실수 증가
         feedbackMessage = '틀렸어요. 다시 생각해볼까요? ❌';
         feedbackColor = Colors.red;
       });
     }
   }
 
-  // 3레벨 모두 클리어 시 다이얼로그
   void _showGameClearDialog() {
+    if (_isGameEnded) return;
+
+    setState(() {
+      _isGameEnded = true;
+    });
+
+    // 🔥 [핵심] 저장할 데이터 계산
+    // 1. 총 틀린 횟수
+    int totalMistakes = _mistakesByLevel.reduce((a, b) => a + b);
+
+    // 2. 상세 결과 문자열 ("1단계 1회, 2단계 0회...")
+    String detailResult =
+        "1단계 ${_mistakesByLevel[0]}회, 2단계 ${_mistakesByLevel[1]}회, 3단계 ${_mistakesByLevel[2]}회";
+
+    // 저장: score에는 총 횟수, result에는 상세 내용을 넣습니다.
+    RecordService().saveRecord(
+      gameTitle: '숫자 퀴즈',
+      score: totalMistakes,
+      result: detailResult,
+    );
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -147,6 +162,24 @@ class _MathGameScreenState extends State<MathGameScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const Text('수학 천재시네요! 👍', style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 10),
+              // 결과 창에도 틀린 횟수 보여주기
+              Text(
+                '총 틀린 횟수: $totalMistakes번',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                detailResult.replaceAll(', ', '\n'), // 줄바꿈해서 보여주기
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 20),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF5A67D8),
@@ -179,22 +212,13 @@ class _MathGameScreenState extends State<MathGameScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isLevelUpMessage = feedbackColor == Colors.blue;
+    // 현재 총 실수 횟수 계산 (화면 표시용)
+    int currentTotalMistakes = _mistakesByLevel.reduce((a, b) => a + b);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('숫자 퀴즈 - 레벨 $_currentLevel'),
+        title: Text('숫자 퀴즈 - 레벨 $_currentLevel', selectionColor: Colors.white),
         backgroundColor: const Color(0xFF5A67D8),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.lock), label: 'Lock'),
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -202,34 +226,29 @@ class _MathGameScreenState extends State<MathGameScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. 지시문 및 피드백
             Column(
               children: [
-                const SizedBox(height: 10),
-                // (추가) 레벨 진행도 표시
-                if (!isLevelUpMessage)
-                  Builder(
-                    builder: (context) {
-                      final int displayProblemNum = min(
-                        _correctAnswersInLevel + 1,
-                        _problemsPerLevel,
-                      );
-
-                      return Text(
-                        '문제 $displayProblemNum / $_problemsPerLevel',
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (!isLevelUpMessage)
+                      Text(
+                        '문제 $_correctAnswersInLevel / $_problemsPerLevel', // (0부터 시작하므로 그대로 둠 or +1)
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           color: Colors.grey.shade600,
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    // 화면 우측 상단에 실수 횟수 표시
+                    Text(
+                      '실수: $currentTotalMistakes',
+                      style: const TextStyle(fontSize: 16, color: Colors.red),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
-                // 피드백 메시지 표시 영역
                 Text(
-                  feedbackMessage.isEmpty
-                      ? '주어진 연산의 결과를 고르세요!'
-                      : feedbackMessage,
+                  feedbackMessage.isEmpty ? '정답을 맞춰보세요!' : feedbackMessage,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 22,
@@ -242,8 +261,6 @@ class _MathGameScreenState extends State<MathGameScreen> {
                 ),
               ],
             ),
-
-            // 2. 문제 표시 영역
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -267,8 +284,6 @@ class _MathGameScreenState extends State<MathGameScreen> {
                 ),
               ),
             ),
-
-            // 3. 선택 버튼 영역
             Column(
               children: _options.map((option) {
                 return _buildAnswerButton(option);
@@ -280,7 +295,6 @@ class _MathGameScreenState extends State<MathGameScreen> {
     );
   }
 
-  // 답변 버튼 위젯 (변경 없음)
   Widget _buildAnswerButton(int answer) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -295,7 +309,6 @@ class _MathGameScreenState extends State<MathGameScreen> {
           elevation: 2,
         ),
         onPressed: () {
-          // (수정) 버튼 클릭 방지 로직
           if (feedbackColor == Colors.transparent ||
               feedbackColor == Colors.red) {
             _checkAnswer(answer);
