@@ -1,170 +1,162 @@
-// lib/screens/main_menu_screen.dart
 import 'package:flutter/material.dart';
-import '../widgets/game_selection_card.dart';
-import 'dart:math';
-import 'intro_screen.dart'; // ✨ 1. IntroScreen으로 가기 위해 import 추가
 
-class MainMenuScreen extends StatefulWidget {
+class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
-
-  @override
-  State<MainMenuScreen> createState() => _MainMenuScreenState();
-}
-
-class _MainMenuScreenState extends State<MainMenuScreen> {
-  // (기존) BottomNavigationBar 탭 처리 함수
-  void _onBottomNavTapped(int index) {
-    switch (index) {
-      case 0: // Lock
-        _showParentalGate(context);
-        break;
-      case 1: // Home
-        break;
-      case 2: // Settings
-        Navigator.pushNamed(context, '/settings');
-        break;
-    }
-  }
-
-  // (기존) 부모님 보호 모드 다이얼로그
-  void _showParentalGate(BuildContext context) {
-    final Random random = Random();
-    int num1 = random.nextInt(10) + 5;
-    int num2 = random.nextInt(10) + 5;
-    int correctAnswer = num1 + num2;
-
-    TextEditingController answerController = TextEditingController();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('🔒 부모님 확인'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('아이가 실수로 접근하는 것을 방지하기 위해, 다음 덧셈 문제를 풀어주세요:\n'),
-              Text(
-                '$num1 + $num2 = ?',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              TextField(
-                controller: answerController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(hintText: '정답을 입력하세요'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text('취소'),
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-            ),
-            ElevatedButton(
-              child: const Text('확인'),
-              onPressed: () {
-                if (answerController.text == correctAnswer.toString()) {
-                  Navigator.pop(dialogContext);
-                  Navigator.pushNamed(context, '/lock');
-                } else {
-                  Navigator.pop(dialogContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('정답이 아닙니다. 다시 시도하세요.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✨ 2. 앱바(AppBar) 추가
+      // 🔥 [추가] 앱바 생성 (main.dart의 테마 설정을 자동으로 따라가서 둥글고 파랗게 나옴)
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // 배경 투명하게 (깔끔함 유지)
-        elevation: 0, // 그림자 제거
+        title: const Text('GrowUp'), // 앱 이름 표시
         leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new,
-            color: Colors.black,
-          ), // 뒤로가기 아이콘
+          icon: const Icon(Icons.arrow_back_ios_new_rounded), // 둥근 뒤로가기 아이콘
           onPressed: () {
-            // ✨ 3. IntroScreen으로 이동 (이전 기록 지우기)
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const IntroScreen()),
-              (route) => false, // 뒤로가기 버튼 눌러도 다시 못 돌아오게 함
-            );
+            // 🔥 IntroScreen('/')으로 이동하고 이전 기록 지우기
+            Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
           },
         ),
       ),
-      // 앱바가 생겼으므로 body가 살짝 내려갑니다.
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0), // 좌우 여백만 적용
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // 앱바가 있으므로 상단 여백을 조금 줄였습니다 (40 -> 20)
-                const SizedBox(height: 20),
-                const Text(
-                  '무엇을 해볼까요?',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
+        child: Column(
+          children: [
+            // 상단 캐릭터 및 인사말 영역
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.face_retouching_natural_rounded,
+                    size: 80,
+                    color: Color(0xFF5A67D8),
                   ),
-                ),
-                const SizedBox(height: 40),
-
-                // (기존 게임 카드들)
-                GameSelectionCard(
-                  title: '기억력 게임',
-                  description: '같은 그림의 카드를 찾아 짝을 맞혀보아요!',
-                  icon: Icons.grid_view_rounded,
-                  color: Colors.purple.shade300,
-                  onTap: () {
-                    Navigator.pushNamed(context, '/game-memory');
-                  },
-                ),
-                const SizedBox(height: 20),
-                GameSelectionCard(
-                  title: '색깔 / 모양 분류',
-                  description: '그림의 색깔과 모양을 구분하여 맞춰보아요!',
-                  icon: Icons.category,
-                  color: Colors.red.shade300,
-                  onTap: () {
-                    Navigator.pushNamed(context, '/game-color');
-                  },
-                ),
-                const SizedBox(height: 20),
-                GameSelectionCard(
-                  title: '숫자 연산',
-                  description: '숫자를 이용하여 간단한 연산을 해보아요!',
-                  icon: Icons.calculate,
-                  color: Colors.orange.shade300,
-                  onTap: () {
-                    Navigator.pushNamed(context, '/game-math');
-                  },
-                ),
-                const SizedBox(height: 40), // 하단 여백 추가
-              ],
+                  const SizedBox(width: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      "만나서 반가워요!\n무엇을 해볼까요?",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                children: [
+                  _buildGameCard(
+                    context,
+                    title: '숫자 연산',
+                    description: '숫자를 이용하여\n간단한 연산을 해보아요!',
+                    icon: Icons.calculate_rounded,
+                    color: Colors.orangeAccent,
+                    route: '/game/math',
+                  ),
+                  const SizedBox(height: 20),
+                  _buildGameCard(
+                    context,
+                    title: '색깔 / 모양 분류',
+                    description: '그림의 색깔과 모양을 구분하여\n맞춰보아요!',
+                    icon: Icons.palette_rounded,
+                    color: Colors.pinkAccent,
+                    route: '/game/color',
+                  ),
+                  const SizedBox(height: 20),
+                  _buildGameCard(
+                    context,
+                    title: '기억력 게임 (직소 퍼즐)',
+                    description: '카드의 위치를 기억해서\n짝을 맞춰보세요!',
+                    icon: Icons.extension_rounded,
+                    color: Colors.lightBlueAccent,
+                    route: '/game/memory',
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameCard(
+    BuildContext context, {
+    required String title,
+    required String description,
+    required IconData icon,
+    required Color color,
+    required String route,
+  }) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, route),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 40, color: color),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
